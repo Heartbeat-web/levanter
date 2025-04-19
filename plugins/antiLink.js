@@ -1,5 +1,6 @@
 const { getAntiLink, bot, setAntiLink, lang } = require('../lib/')
 
+// Anti-link command handler
 bot(
   {
     pattern: 'antilink ?(.*)',
@@ -14,6 +15,7 @@ bot(
     if (!match) {
       return message.send(lang.plugins.antilink.example.format(status))
     }
+
     if (match === 'on' || match === 'off') {
       if (match === 'off' && !antilink.enabled) return message.send(lang.plugins.antilink.disable)
       await setAntiLink(message.jid, match === 'on', message.id)
@@ -39,6 +41,7 @@ bot(
       await setAntiLink(message.jid, match, message.id)
       return message.send(lang.plugins.antilink.action_update.format(action))
     }
+
     const res = await setAntiLink(message.jid, match)
     return message.send(
       lang.plugins.antilink.update.format(
@@ -46,5 +49,41 @@ bot(
         res.notallow.length ? res.notallow.join(', ') : ''
       )
     )
+  }
+)
+
+// Link detection and action handler
+bot(
+  {
+    pattern: '.*',
+    type: 'group',
+    onlyGroup: true,
+  },
+  async (message) => {
+    const antilink = await getAntiLink(message.jid, message.id)
+    if (!antilink || !antilink.enabled) return
+
+    const linkRegex = /(?:https?|ftp):\/\/[^\s]+/gi
+    const links = message.text?.match(linkRegex)
+    if (!links) return
+
+    const allowedUrls = antilink.allowedUrls || []
+    const disallowedLinks = links.filter(link =>
+      !allowedUrls.some(allowed => link.includes(allowed))
+    )
+
+    if (disallowedLinks.length === 0) return
+
+    // Delete the message
+    await message.delete()
+
+    // Take action
+    if (antilink.action === 'kick') {
+      await message.Kick([message.sender])
+      await message.send(lang.plugins.antilink.kicked.format(message.sender))
+    } else if (antilink.action === 'warn') {
+      await message.send(lang.plugins.antilink.warn.format(message.sender))
+    }
+    // If action is 'null', do nothing else
   }
 )
